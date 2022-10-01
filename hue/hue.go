@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/grandcat/zeroconf"
+	"github.com/lucasb-eyer/go-colorful"
 )
 
 type Bridge struct {
@@ -357,4 +359,118 @@ func (b *Bridge) GetLightByName(name string) (*Light, error) {
 		}
 	}
 	return nil, fmt.Errorf("light named: %s not found", name)
+}
+
+func (b *Bridge) ToggleLight(id string, on bool) error {
+	url := fmt.Sprintf("https://%s/clip/v2/resource/light/%s", b.IpAddress.String(), id)
+	body := map[string]map[string]bool{
+		"on": {
+			"on": on,
+		},
+	}
+	rb, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, _ := http.NewRequest("PUT", url, bytes.NewBuffer(rb))
+	req.Header.Add(applicationKey, b.credentials.username)
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("could not turn light, status code: %s", resp.Status)
+	}
+
+	return nil
+}
+
+func (b *Bridge) AdjustBrightness(id string, percentage float64) error {
+	if percentage < 0 {
+		return errors.New("brightness percentage less than 0")
+	}
+	if percentage > 100 {
+		return errors.New("brightness percentage greater than 100")
+	}
+	url := fmt.Sprintf("https://%s/clip/v2/resource/light/%s", b.IpAddress.String(), id)
+	body := map[string]map[string]float64{
+		"dimming": {
+			"brightness": percentage,
+		},
+	}
+	rb, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, _ := http.NewRequest("PUT", url, bytes.NewBuffer(rb))
+	req.Header.Add(applicationKey, b.credentials.username)
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("could not adjust brightness, status code: %s", resp.Status)
+	}
+
+	return nil
+}
+
+func (b *Bridge) SetColor(id string, c colorful.Color) error {
+	x, y := getXy(c)
+	url := fmt.Sprintf("https://%s/clip/v2/resource/light/%s", b.IpAddress.String(), id)
+	body := map[string]map[string]map[string]float64{
+		"color": {
+			"xy": {
+				"x": x,
+				"y": y,
+			},
+		},
+	}
+	rb, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, _ := http.NewRequest("PUT", url, bytes.NewBuffer(rb))
+	req.Header.Add(applicationKey, b.credentials.username)
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("could not adjust brightness, status code: %s", resp.Status)
+	}
+
+	return nil
+}
+
+func getXy(c colorful.Color) (float64, float64) {
+	// from: https://developers.meethue.com/develop/application-design-guidance/color-conversion-formulas-rgb-to-xy-and-back/#Color-rgb-to-xy
+	red := 0.0
+	green := 0.0
+	blue := 0.0
+	if c.R > 0.04045 {
+		red = math.Pow((c.Clamped().R+0.055)/(1.0+0.055), 2.4)
+	} else {
+		red = (c.R / 12.92)
+	}
+	if c.G > 0.04045 {
+		green = math.Pow((c.Clamped().G+0.055)/(1.0+0.055), 2.4)
+	} else {
+		green = (c.G / 12.92)
+	}
+	if c.B > 0.04045 {
+		blue = math.Pow((c.Clamped().B+0.055)/(1.0+0.055), 2.4)
+	} else {
+		blue = c.B / 12.92
+	}
+
+	x1 := red*0.4124 + green*0.3576 + blue*0.1805
+	y1 := red*0.2126 + green*0.7152 + blue*0.0722
+	z1 := red*0.0193 + green*0.1192 + blue*0.9505
+
+	x := x1 / (x1 + y1 + z1)
+	y := y1 / (x1 + y1 + z1)
+	//brightness := y1
+	// TODO: calculate closeness to gamut provided by light, for now just...yolo
+	return x, y
 }
