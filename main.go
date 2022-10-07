@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -9,9 +10,25 @@ import (
 
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/nstehr/lampy/hue"
+	"github.com/nstehr/lampy/schedule"
 )
 
+var cal = flag.String("cal", "", "ical url for events")
+
+const (
+	cardboard = "Green bin\\, black bin\\, and yard trimmings"
+	garbage   = "Garbage\\, yard trimmings\\, blue bin\\, and green bin"
+)
+
+// Green bin\, black bin\, and yard trimmings
+// Garbage\, yard trimmings\, blue bin\, and green bin
 func main() {
+	flag.Parse()
+
+	if *cal == "" {
+		log.Fatal("No calendar specified")
+	}
+
 	b, err := hue.DiscoverBridge()
 	if err != nil {
 		log.Fatal("Could not discover bridge", err)
@@ -26,19 +43,45 @@ func main() {
 	if err != nil {
 		log.Fatal("Error getting light ", err)
 	}
-	log.Println(light)
 
-	b.ToggleLight(light.ID, true)
-	b.AdjustBrightness(light.ID, 100)
-	c, err := colorful.Hex("#A7226E")
+	green, err := colorful.Hex("#04db50")
 	if err != nil {
 		log.Fatal(err)
 	}
-	b.SetColor(light.ID, c)
 
-	//colors := colorful.FastHappyPalette(5)
+	blue, err := colorful.Hex("#0761f2")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	//partyMode(b, light, []colorful.Color{c})
+	colourMap := map[string]colorful.Color{garbage: blue, cardboard: green}
+	sched := schedule.NewSchedule(*cal)
+	// get all the events within the week. Since we are using our
+	// garbage schedule we can just pull out the first, since there should be
+	// just one
+	events, err := sched.Upcoming(time.Hour * 24 * 7)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// set the lamp on startup
+	b.AdjustBrightness(light.ID, 0)
+	setLamp(events[0], b, light, colourMap)
+	// main glue logic here
+	go func() {
+
+		for range time.Tick(24 * time.Hour) {
+			log.Println("fetching schedule and setting colour")
+			events, err := sched.Upcoming(time.Hour * 24 * 7)
+			if err != nil {
+				log.Println("Error getting upcoming events:", err)
+				continue
+			}
+
+			// set the lamp on startup
+			setLamp(events[0], b, light, colourMap)
+		}
+	}()
 
 	// Clean exit.
 	sig := make(chan os.Signal, 1)
@@ -49,6 +92,27 @@ func main() {
 	log.Println("Ctrl-c detected, shutting down")
 
 	log.Println("Goodbye.")
+}
+
+func setLamp(event *schedule.Event, b *hue.Bridge, light *hue.Light, colourMap map[string]colorful.Color) {
+	b.ToggleLight(light.ID, true)
+
+	now := schedule.TruncateToDay(time.Now())
+	diff := event.Start.Sub(now)
+	log.Printf("We are %v away\n", diff)
+	// if the day is within 24 hours, we'll set it to full brightness
+	if diff.Seconds() == 0 || diff.Hours() == 24 {
+		b.AdjustBrightness(light.ID, 100)
+	} else if diff.Hours() == 48 {
+		b.AdjustBrightness(light.ID, 20)
+	} else {
+		b.AdjustBrightness(light.ID, 5)
+	}
+
+	if c, ok := colourMap[event.Summary]; ok {
+		b.SetColor(light.ID, c)
+	}
+
 }
 
 func partyMode(b *hue.Bridge, light *hue.Light, pallete []colorful.Color) {
