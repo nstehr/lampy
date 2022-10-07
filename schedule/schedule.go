@@ -66,7 +66,7 @@ func (s *Schedule) GetEvents() ([]*Event, error) {
 	}
 	s.events = events
 	s.lastFetch = time.Now()
-	return flatten(cal)
+	return events, nil
 }
 
 func TruncateToDay(t time.Time) time.Time {
