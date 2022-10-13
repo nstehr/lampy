@@ -20,6 +20,10 @@ type Event struct {
 	Description string
 }
 
+const (
+	refreshInterval = 72
+)
+
 func NewSchedule(calUrl string) *Schedule {
 	return &Schedule{calUrl: calUrl}
 }
@@ -34,8 +38,13 @@ func (s *Schedule) Upcoming(end time.Duration) ([]*Event, error) {
 
 	var matchedEvents []*Event
 	for _, event := range events {
+		// specific to the type of data I'm receiving, since all DTSTART in my calendar
+		// are just days, not date + time
 		now := TruncateToDay(time.Now())
-		if (event.Start.Equal(now)) || event.Start.After(now) && event.Start.Before(now.Add(end)) {
+
+		if (event.Start.Equal(now)) ||
+			(event.Start.After(now) &&
+				(event.Start.Equal(now.Add(end)) || event.Start.Before(now.Add(end)))) {
 			matchedEvents = append(matchedEvents, event)
 		}
 
@@ -44,7 +53,7 @@ func (s *Schedule) Upcoming(end time.Duration) ([]*Event, error) {
 }
 
 func (s *Schedule) GetEvents() ([]*Event, error) {
-	if time.Now().Before(s.lastFetch.Add(time.Hour * 72)) {
+	if time.Now().Before(s.lastFetch.Add(time.Hour * refreshInterval)) {
 		log.Println("returning cached events")
 		return s.events, nil
 	}
