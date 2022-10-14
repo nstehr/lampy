@@ -76,7 +76,7 @@ func main() {
 
 		for range time.Tick(4 * time.Hour) {
 			log.Println("fetching schedule and setting colour")
-			events, err := sched.Upcoming(time.Hour * 24 * 14)
+			events, err := sched.Upcoming(time.Hour * 24 * 7)
 			if err != nil {
 				log.Println("Error getting upcoming events:", err)
 				continue
