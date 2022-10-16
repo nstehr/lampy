@@ -19,15 +19,15 @@ var cal = flag.String("cal", "", "ical url for events")
 const (
 	cardboard = "cardboard"
 	garbage   = "garbage"
+	week      = time.Hour * 24 * 7
 )
 
 func main() {
-	flag.Parse()
 
-	if *cal == "" {
-		log.Fatal("No calendar specified")
+	cal := os.Getenv("LAMPY_SCHEDULE")
+	if cal == "" {
+		log.Fatal("no calendar specified")
 	}
-
 	b, err := hue.DiscoverBridge()
 	if err != nil {
 		log.Fatal("Could not discover bridge", err)
@@ -54,11 +54,11 @@ func main() {
 	}
 
 	colourMap := map[string]colorful.Color{garbage: blue, cardboard: green}
-	sched := schedule.NewSchedule(*cal)
+	sched := schedule.NewSchedule(cal)
 	// get all the events within the week. Since we are using our
 	// garbage schedule we can just pull out the first, since there should be
 	// just one
-	events, err := sched.Upcoming(time.Hour * 24 * 7)
+	events, err := sched.Upcoming(week)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func main() {
 
 		for range time.Tick(4 * time.Hour) {
 			log.Println("fetching schedule and setting colour")
-			events, err := sched.Upcoming(time.Hour * 24 * 7)
+			events, err := sched.Upcoming(week)
 			if err != nil {
 				log.Println("Error getting upcoming events:", err)
 				continue
@@ -120,7 +120,8 @@ func setLamp(event *schedule.Event, b *hue.Bridge, light *hue.Light, colourMap m
 		// bump the brightness a tad as we get closer
 		b.AdjustBrightness(light.ID, 20)
 	} else {
-		b.AdjustBrightness(light.ID, 5)
+		// will flip it off otherwise
+		b.AdjustBrightness(light.ID, 0)
 	}
 	key := garbage
 
