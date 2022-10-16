@@ -5,6 +5,6 @@ ADD . /lampy
 WORKDIR /lampy
 RUN go build -o lampy
 
-FROM gcr.io/distroless/base AS production
+FROM debian:latest AS production
 COPY --from=builder /lampy/lampy .
 CMD ["./lampy"]
