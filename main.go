@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -28,9 +29,19 @@ func main() {
 	if cal == "" {
 		log.Fatal("no calendar specified")
 	}
+
 	b, err := hue.DiscoverBridge()
 	if err != nil {
-		log.Fatal("Could not discover bridge", err)
+		log.Println("Could not discover bridge", err)
+		staticBridge := os.Getenv("HUE_BRIDGE")
+		if staticBridge == "" {
+			log.Fatal("Could not discover bridge and no fallback provided")
+		}
+		staticIp := net.ParseIP(staticBridge)
+		if staticIp == nil {
+			log.Fatalf("Error parsing bridge ip: %s", staticIp)
+		}
+		b = hue.CreateBridge(staticIp)
 	}
 
 	err = b.Authenticate("lampy", "v1.0")

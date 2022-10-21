@@ -126,6 +126,17 @@ const (
 	applicationKey = "hue-application-key"
 )
 
+func CreateBridge(ip net.IP) *Bridge {
+	config := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	tr := &http.Transport{TLSClientConfig: config}
+	client := &http.Client{Transport: tr}
+
+	b := Bridge{IpAddress: ip, client: client}
+	return &b
+}
+
 func DiscoverBridge() (*Bridge, error) {
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
